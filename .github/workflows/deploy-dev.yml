@@ -1,0 +1,66 @@
+# ============================================================
+# DEV 環境へのデプロイ
+# ============================================================
+# トリガー: develop ブランチへの push
+# ツール: schemachange (Python)
+# ============================================================
+
+name: Deploy to DEV
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'migrations/**'
+      - '.github/workflows/**'
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install schemachange
+        run: pip install schemachange
+
+      - name: Create private key file
+        env:
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+        run: |
+          echo "$SNOWFLAKE_PRIVATE_KEY" > /tmp/rsa_key.p8
+          chmod 600 /tmp/rsa_key.p8
+
+      - name: Deploy to DEV with schemachange
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+        run: |
+          schemachange deploy \
+            -f ./migrations \
+            -a $SNOWFLAKE_ACCOUNT \
+            -u $SNOWFLAKE_USER \
+            -r ACCOUNTADMIN \
+            -w COMPUTE_WH \
+            -d SCHEMACHANGE_DEV_DB \
+            -c SCHEMACHANGE_DEV_DB.SCHEMACHANGE.CHANGE_HISTORY \
+            --private-key-path /tmp/rsa_key.p8 \
+            --create-change-history-table
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/rsa_key.p8
+
+      - name: Deployment Summary
+        run: |
+          echo "✅ Successfully deployed to DEV environment"
+          echo "📦 Database: SCHEMACHANGE_DEV_DB"
+          echo "🔧 Tool: schemachange"
+
