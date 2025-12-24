@@ -1,113 +1,139 @@
-# Snowflake DevOps - schemachange
+# Snowflake DevOps with schemachange
 
-schemachange を使った Snowflake Database Change Management (DCM) の検証用リポジトリ
+このプロジェクトは **schemachange** を使用した Snowflake データベースの CI/CD パイプラインのサンプル実装です。
 
-## 概要
+## 🎮 プロジェクト概要
 
-schemachange は Snowflake Labs が提供するオープンソースの Python ツールで、
-Flyway に触発されたデータベースマイグレーションツールです。
+Zelda ゲームデータを題材に、schemachange によるスキーマ管理と GitHub Actions による自動デプロイを実現しています。
 
-- **ツール**: [schemachange](https://github.com/Snowflake-Labs/schemachange)
-- **環境**: DEV / TEST / PROD（SCHEMACHANGE_*_DB）
-- **CI/CD**: GitHub Actions
-
-## アーキテクチャ
+## 📁 プロジェクト構造
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         GitHub                                  │
-│  ┌──────────────┐   ┌──────────────┐                           │
-│  │ migrations/  │   │ .github/     │                           │
-│  │ ├── V1.0.0   │   │ workflows/   │                           │
-│  │ ├── V1.1.0   │   │              │                           │
-│  │ └── R1.0.0   │   │              │                           │
-│  └──────────────┘   └──────────────┘                           │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                    Git Push / PR Merge
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      GitHub Actions                             │
-│  1. Python インストール                                          │
-│  2. pip install schemachange                                    │
-│  3. schemachange deploy -f ./migrations ...                     │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        Snowflake                                │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
-│  │ SCHEMACHANGE_   │  │ SCHEMACHANGE_   │  │ SCHEMACHANGE_   │ │
-│  │ DEV_DB          │  │ TEST_DB         │  │ PROD_DB         │ │
-│  │ ├── APP         │  │ ├── APP         │  │ ├── APP         │ │
-│  │ └── SCHEMACHANGE│  │ └── SCHEMACHANGE│  │ └── SCHEMACHANGE│ │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
-│                                                                 │
-│  SCHEMACHANGE スキーマに change_history テーブルが作成される      │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## ディレクトリ構成
-
-```
-.
+snowflake-devops-schemachange/
 ├── .github/
 │   └── workflows/
-│       ├── deploy-dev.yml      # DEV環境デプロイ（develop へ push）
-│       ├── deploy-test.yml     # TEST環境デプロイ（staging へ push）
-│       └── deploy-prod.yml     # PROD環境デプロイ（main へ push）
-│
+│       ├── deploy-dev.yml      # develop → SCHEMACHANGE_ZELDA_DEV
+│       ├── deploy-test.yml     # test → SCHEMACHANGE_ZELDA_TEST
+│       └── deploy-prod.yml     # main → SCHEMACHANGE_ZELDA_PROD
 ├── migrations/
-│   ├── V1.0.0__create_app_schema.sql      # スキーマ作成
-│   ├── V1.1.0__create_users_table.sql     # テーブル作成
-│   ├── V1.2.0__create_orders_table.sql    # テーブル作成
-│   └── R1.0.0__create_user_view.sql       # ビュー作成（繰り返し実行可能）
-│
+│   ├── V1.0.0__create_raw_schema.sql
+│   ├── V1.1.0__create_games_raw_table.sql
+│   ├── V1.2.0__create_core_schema.sql
+│   ├── V1.3.0__create_dim_game.sql
+│   ├── V1.4.0__create_mart_schema.sql
+│   └── R__create_views.sql
+├── data/
+│   └── zelda_games_raw.json
 └── README.md
 ```
 
-## ブランチ戦略
+## 🔧 schemachange について
+
+### schemachange とは？
+
+[schemachange](https://github.com/Snowflake-Labs/schemachange) は Snowflake 向けの軽量なデータベースマイグレーションツールです。
+
+### ファイル命名規則
+
+| プレフィックス | 説明 | 例 |
+|---------------|------|-----|
+| `V` | Versioned - 一度だけ実行 | `V1.0.0__create_schema.sql` |
+| `R` | Repeatable - 変更時に再実行 | `R__create_views.sql` |
+| `A` | Always - 毎回実行 | `A__refresh_data.sql` |
+
+## 🚀 開発フロー
 
 ```
-feature/* ──PR──> develop ──PR──> staging ──PR──> main
-     │                │                │            │
-     ▼                ▼                ▼            ▼
-  プレビュー       DEV環境          TEST環境      PROD環境
+┌─────────────────────────────────────────────────────────────────┐
+│                        開発フロー                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  [feature/*]  ──PR──▶  [develop]  ──PR──▶  [test]  ──PR──▶  [main] │
+│                           │                  │               │   │
+│                           ▼                  ▼               ▼   │
+│                    GitHub Actions      GitHub Actions   GitHub Actions │
+│                           │                  │               │   │
+│                           ▼                  ▼               ▼   │
+│                   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
+│                   │SCHEMACHANGE  │  │SCHEMACHANGE  │  │SCHEMACHANGE  │ │
+│                   │_ZELDA_DEV    │  │_ZELDA_TEST   │  │_ZELDA_PROD   │ │
+│                   └──────────────┘  └──────────────┘  └──────────────┘ │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-## schemachange ファイル命名規則
+## 📦 データベース構造
 
-| プレフィックス | 説明 | 実行タイミング |
-|---------------|------|---------------|
-| **V** (Versioned) | バージョン管理されたスクリプト | 一度だけ実行 |
-| **R** (Repeatable) | 繰り返し実行可能なスクリプト | 変更があれば毎回実行 |
-| **A** (Always) | 常に実行されるスクリプト | 毎回最後に実行 |
+各環境で以下のスキーマが作成されます：
 
-## セットアップ
+| スキーマ | 用途 |
+|---------|------|
+| `RAW_ZELDA` | 生データ格納（VARIANT型） |
+| `CORE_ZELDA` | クレンジング済みデータ（DIMテーブル） |
+| `MART_ZELDA` | 分析用データマート（ビュー） |
+| `SCHEMACHANGE` | 変更履歴管理 |
 
-### 1. Snowflake データベース作成
+## ⚙️ GitHub Actions 設定
 
-```sql
--- DEV 環境
-CREATE DATABASE IF NOT EXISTS SCHEMACHANGE_DEV_DB;
+### 必要な Secrets
 
--- TEST 環境
-CREATE DATABASE IF NOT EXISTS SCHEMACHANGE_TEST_DB;
-
--- PROD 環境
-CREATE DATABASE IF NOT EXISTS SCHEMACHANGE_PROD_DB;
-```
-
-### 2. GitHub Secrets 設定
+GitHub リポジトリの Settings → Secrets and variables → Actions で以下を設定：
 
 | Secret名 | 説明 |
 |----------|------|
-| SNOWFLAKE_ACCOUNT | Snowflakeアカウント名 |
-| SNOWFLAKE_USER | ユーザー名（CI/CD用） |
-| SNOWFLAKE_PRIVATE_KEY | 秘密鍵（Key-Pair認証用） |
+| `SNOWFLAKE_ACCOUNT` | Snowflake アカウント識別子 |
+| `SNOWFLAKE_USER` | ユーザー名 |
+| `SNOWFLAKE_PRIVATE_KEY` | 秘密鍵（Base64エンコード） |
+| `SNOWFLAKE_ROLE` | 使用するロール |
+| `SNOWFLAKE_WAREHOUSE` | 使用するウェアハウス |
 
-## 参考リンク
+## 🛠️ ローカルでの実行
+
+### 1. schemachange のインストール
+
+```bash
+pip install schemachange
+```
+
+### 2. 環境変数の設定
+
+```bash
+export SNOWFLAKE_ACCOUNT=your_account
+export SNOWFLAKE_USER=your_user
+export SNOWFLAKE_ROLE=your_role
+export SNOWFLAKE_WAREHOUSE=your_warehouse
+export SNOWFLAKE_PRIVATE_KEY_PATH=/path/to/key.p8
+```
+
+### 3. デプロイの実行
+
+```bash
+schemachange deploy \
+  --root-folder migrations \
+  --snowflake-account $SNOWFLAKE_ACCOUNT \
+  --snowflake-user $SNOWFLAKE_USER \
+  --snowflake-role $SNOWFLAKE_ROLE \
+  --snowflake-warehouse $SNOWFLAKE_WAREHOUSE \
+  --snowflake-database SCHEMACHANGE_ZELDA_DEV \
+  --snowflake-private-key-path $SNOWFLAKE_PRIVATE_KEY_PATH \
+  --change-history-table SCHEMACHANGE_ZELDA_DEV.SCHEMACHANGE.CHANGE_HISTORY \
+  --create-change-history-table
+```
+
+## 📊 変更履歴の確認
+
+schemachange は自動的に `SCHEMACHANGE.CHANGE_HISTORY` テーブルを作成し、適用済みのマイグレーションを記録します：
+
+```sql
+SELECT * FROM SCHEMACHANGE_ZELDA_DEV.SCHEMACHANGE.CHANGE_HISTORY
+ORDER BY INSTALLED_ON DESC;
+```
+
+## 🔗 関連リンク
 
 - [schemachange GitHub](https://github.com/Snowflake-Labs/schemachange)
-- [Snowflake DevOps ドキュメント](https://docs.snowflake.com/ja/developer-guide/builders/devops)
+- [Snowflake Documentation](https://docs.snowflake.com/)
 
+## 📝 ライセンス
+
+MIT License
