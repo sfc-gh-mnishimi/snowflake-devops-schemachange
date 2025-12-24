@@ -1,66 +1,58 @@
-# ============================================================
-# TEST 環境へのデプロイ
-# ============================================================
-# トリガー: staging ブランチへの push
-# ツール: schemachange (Python)
-# ============================================================
-
-name: Deploy to TEST
+name: Deploy to TEST (schemachange)
 
 on:
   push:
     branches:
-      - staging
-    paths:
-      - 'migrations/**'
-      - '.github/workflows/**'
+      - test
+
+env:
+  SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+  SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+  SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+  SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+  SNOWFLAKE_DATABASE: SCHEMACHANGE_ZELDA_TEST
 
 jobs:
-  deploy-test:
+  deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Install schemachange
-        run: pip install schemachange
-
-      - name: Create private key file
-        env:
-          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+      
+      - name: Install dependencies
         run: |
-          echo "$SNOWFLAKE_PRIVATE_KEY" > /tmp/rsa_key.p8
-          chmod 600 /tmp/rsa_key.p8
-
-      - name: Deploy to TEST with schemachange
-        env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          pip install schemachange
+      
+      - name: Setup private key
+        run: |
+          echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" | base64 -d > /tmp/snowflake_key.p8
+          chmod 600 /tmp/snowflake_key.p8
+      
+      - name: Deploy with schemachange
         run: |
           schemachange deploy \
-            -f ./migrations \
-            -a $SNOWFLAKE_ACCOUNT \
-            -u $SNOWFLAKE_USER \
-            -r ACCOUNTADMIN \
-            -w COMPUTE_WH \
-            -d SCHEMACHANGE_TEST_DB \
-            -c SCHEMACHANGE_TEST_DB.SCHEMACHANGE.CHANGE_HISTORY \
-            --private-key-path /tmp/rsa_key.p8 \
+            --root-folder migrations \
+            --snowflake-account $SNOWFLAKE_ACCOUNT \
+            --snowflake-user $SNOWFLAKE_USER \
+            --snowflake-role $SNOWFLAKE_ROLE \
+            --snowflake-warehouse $SNOWFLAKE_WAREHOUSE \
+            --snowflake-database $SNOWFLAKE_DATABASE \
+            --snowflake-private-key-path /tmp/snowflake_key.p8 \
+            --change-history-table $SNOWFLAKE_DATABASE.SCHEMACHANGE.CHANGE_HISTORY \
             --create-change-history-table
-
+      
       - name: Cleanup
         if: always()
-        run: rm -f /tmp/rsa_key.p8
-
+        run: rm -f /tmp/snowflake_key.p8
+      
       - name: Deployment Summary
         run: |
-          echo "✅ Successfully deployed to TEST environment"
-          echo "📦 Database: SCHEMACHANGE_TEST_DB"
-          echo "🔧 Tool: schemachange"
-
+          echo "✅ Successfully deployed to SCHEMACHANGE_ZELDA_TEST"
+          echo "📦 Branch: test"
+          echo "🕐 Time: $(date)"
