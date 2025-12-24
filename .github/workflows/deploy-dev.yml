@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - develop
+    paths:
+      - 'migrations/**'
+      - '.github/workflows/deploy-dev.yml'
 
 env:
   SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
